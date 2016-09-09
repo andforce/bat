@@ -1,4 +1,5 @@
 // Copyright 2014 beego Author. All Rights Reserved.
+// Copyright 2015 bat authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,7 +52,7 @@ import (
 	"time"
 )
 
-var defaultSetting = BeegoHttpSettings{false, "beegoServer", 60 * time.Second, 60 * time.Second, nil, nil, nil, false, true}
+var defaultSetting = BeegoHttpSettings{false, "beegoServer", 60 * time.Second, 60 * time.Second, nil, nil, nil, false, true, true}
 var defaultCookieJar http.CookieJar
 var settingMutex sync.Mutex
 
@@ -76,41 +77,46 @@ func SetDefaultSetting(setting BeegoHttpSettings) {
 }
 
 // return *BeegoHttpRequest with specific method
-func newBeegoRequest(url, method string) *BeegoHttpRequest {
+func NewBeegoRequest(rawurl, method string) *BeegoHttpRequest {
 	var resp http.Response
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		log.Fatal(err)
+	}
 	req := http.Request{
+		URL:        u,
 		Method:     method,
 		Header:     make(http.Header),
 		Proto:      "HTTP/1.1",
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 	}
-	return &BeegoHttpRequest{url, &req, map[string]string{}, map[string]string{}, defaultSetting, &resp, nil, nil}
+	return &BeegoHttpRequest{rawurl, &req, map[string]string{}, map[string]string{}, defaultSetting, &resp, nil, nil}
 }
 
 // Get returns *BeegoHttpRequest with GET method.
 func Get(url string) *BeegoHttpRequest {
-	return newBeegoRequest(url, "GET")
+	return NewBeegoRequest(url, "GET")
 }
 
 // Post returns *BeegoHttpRequest with POST method.
 func Post(url string) *BeegoHttpRequest {
-	return newBeegoRequest(url, "POST")
+	return NewBeegoRequest(url, "POST")
 }
 
 // Put returns *BeegoHttpRequest with PUT method.
 func Put(url string) *BeegoHttpRequest {
-	return newBeegoRequest(url, "PUT")
+	return NewBeegoRequest(url, "PUT")
 }
 
 // Delete returns *BeegoHttpRequest DELETE method.
 func Delete(url string) *BeegoHttpRequest {
-	return newBeegoRequest(url, "DELETE")
+	return NewBeegoRequest(url, "DELETE")
 }
 
 // Head returns *BeegoHttpRequest with HEAD method.
 func Head(url string) *BeegoHttpRequest {
-	return newBeegoRequest(url, "HEAD")
+	return NewBeegoRequest(url, "HEAD")
 }
 
 // BeegoHttpSettings
@@ -124,6 +130,7 @@ type BeegoHttpSettings struct {
 	Transport        http.RoundTripper
 	EnableCookie     bool
 	Gzip             bool
+	DumpBody         bool
 }
 
 // BeegoHttpRequest provides more useful methods for requesting one url than http.Request.
@@ -136,6 +143,11 @@ type BeegoHttpRequest struct {
 	resp    *http.Response
 	body    []byte
 	dump    []byte
+}
+
+// get request
+func (b *BeegoHttpRequest) GetRequest() *http.Request {
+	return b.req
 }
 
 // Change request settings
@@ -165,6 +177,12 @@ func (b *BeegoHttpRequest) SetUserAgent(useragent string) *BeegoHttpRequest {
 // Debug sets show debug or not when executing request.
 func (b *BeegoHttpRequest) Debug(isdebug bool) *BeegoHttpRequest {
 	b.setting.ShowDebug = isdebug
+	return b
+}
+
+// Dump Body.
+func (b *BeegoHttpRequest) DumpBody(isdump bool) *BeegoHttpRequest {
+	b.setting.DumpBody = isdump
 	return b
 }
 
@@ -293,8 +311,8 @@ func (b *BeegoHttpRequest) buildUrl(paramBody string) {
 		return
 	}
 
-	// build POST url and body
-	if b.req.Method == "POST" && b.req.Body == nil {
+	// build POST/PUT/PATCH url and body
+	if (b.req.Method == "POST" || b.req.Method == "PUT" || b.req.Method == "PATCH") && b.req.Body == nil {
 		// with files
 		if len(b.files) > 0 {
 			pr, pw := io.Pipe()
@@ -339,6 +357,15 @@ func (b *BeegoHttpRequest) getResponse() (*http.Response, error) {
 	if b.resp.StatusCode != 0 {
 		return b.resp, nil
 	}
+	resp, err := b.SendOut()
+	if err != nil {
+		return nil, err
+	}
+	b.resp = resp
+	return resp, nil
+}
+
+func (b *BeegoHttpRequest) SendOut() (*http.Response, error) {
 	var paramBody string
 	if len(b.params) > 0 {
 		var buf bytes.Buffer
@@ -402,19 +429,13 @@ func (b *BeegoHttpRequest) getResponse() (*http.Response, error) {
 	}
 
 	if b.setting.ShowDebug {
-		dump, err := httputil.DumpRequest(b.req, true)
+		dump, err := httputil.DumpRequest(b.req, b.setting.DumpBody)
 		if err != nil {
 			println(err.Error())
 		}
 		b.dump = dump
 	}
-
-	resp, err := client.Do(b.req)
-	if err != nil {
-		return nil, err
-	}
-	b.resp = resp
-	return resp, nil
+	return client.Do(b.req)
 }
 
 // String returns the body string in response.

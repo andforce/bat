@@ -12,7 +12,7 @@ func filter(args []string) []string {
 	if inSlice(strings.ToUpper(args[i]), methodList) {
 		*method = strings.ToUpper(args[i])
 		i++
-	} else if len(args) > 0 {
+	} else if len(args) > 0 && *method == "GET" {
 		for _, v := range args[1:] {
 			// defaults to either GET (with no request data) or POST (with request data).
 			// Params
@@ -28,6 +28,8 @@ func filter(args []string) []string {
 				break
 			}
 		}
+	} else if *method == "GET" && body != "" {
+		*method = "POST"
 	}
 	if len(args) <= i {
 		log.Fatal("Miss the URL")

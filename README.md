@@ -3,8 +3,10 @@ Go implemented CLI cURL-like tool for humans. Bat can be used for testing, debug
 
 Inspired by [Httpie](https://github.com/jakubroztocil/httpie). Thanks to the author, Jakub.
 
+
 ![](images/logo.png)
 
+![](images/example.png)
 
 - [Main Features](#main-features)
 - [Installation](#installation)
@@ -15,6 +17,8 @@ Inspired by [Httpie](https://github.com/jakubroztocil/httpie). Thanks to the aut
 - [JSON](#json)
 - [Forms](#forms)
 - [HTTP Headers](#http-headers)
+- [Authentication](#authentication)
+- [Proxies](#proxies)
 
 ## Main Features
 
@@ -45,9 +49,13 @@ See also `bat --help`.
 
 ### Examples
 
-Custom [HTTP method](#http-method), [HTTP headers](#http-headers) and [JSON](#json) data:
+Basic settings - [HTTP method](#http-method), [HTTP headers](#http-headers) and [JSON](#json) data:
 
 	$ bat PUT example.org X-API-Token:123 name=John
+
+Any custom HTTP method (such as WebDAV, etc.):
+
+	$ bat -method=PROPFIND example.org name=John
 
 Submitting forms:
 
@@ -55,7 +63,7 @@ Submitting forms:
 	
 See the request that is being sent using one of the output options:
 
-	$ bat -v example.org
+	$ bat -print="Hhb" example.org
 
 Use Github API to post a comment on an issue with authentication:
 
@@ -71,7 +79,7 @@ Download a file and save it via redirected output:
 	
 Download a file wget style:
 
-	$ bat --download example.org/file
+	$ bat -download=true example.org/file
 
 Set a custom Host header to work around missing DNS records:
 
@@ -136,11 +144,12 @@ You can also quote values, e.g. `foo="bar baz"`.
 ## JSON
 JSON is the lingua franca of modern web services and it is also the implicit content type bat by default uses:
 
-If your command includes some data items, they are serialized as a JSON object by default. bat also automatically sets the following headers, both of which can be overwritten:
+If your command includes some data items, they are serialized as a JSON object by default. bat also automatically sets the following headers, both of which can be overridden:
 
-|Content-Type	| application/json |
-| -------------| ----------------- |
-|Accept	        |application/json|
+| header       | value            |
+| ------------ | ---------------- |
+| Content-Type | application/json |
+| Accept       | application/json |
 
 You can use --json=true, -j=true to explicitly set Accept to `application/json` regardless of whether you are sending data (it's a shortcut for setting the header via the usual header notation – `bat url Accept:application/json`).
 
@@ -196,7 +205,7 @@ It is possible to make form data the implicit content type instead of JSON via t
 
 ### Regular Forms
 
-	$ bat --form=true POST api.example.org/person/1 name='John Smith' \
+	$ bat -f=true POST api.example.org/person/1 name='John Smith' \
     email=john@example.org
 
 	POST /person/1 HTTP/1.1
@@ -244,4 +253,26 @@ There are a couple of default headers that bat sets:
 	User-Agent: bat/<version>
 	Host: <taken-from-URL>
 
-Any of the default headers can be overwritten.
+Any of the default headers can be overridden.
+
+# Authentication
+Basic auth:
+
+	$ bat -a=username:password example.org
+
+# Proxies
+You can specify proxies to be used through the --proxy argument for each protocol (which is included in the value in case of redirects across protocols):
+
+	$ bat --proxy=http://10.10.1.10:3128 example.org
+	
+With Basic authentication:
+
+	$ bat --proxy=http://user:pass@10.10.1.10:3128 example.org
+	
+You can also configure proxies by environment variables HTTP_PROXY and HTTPS_PROXY, and the underlying Requests library will pick them up as well. If you want to disable proxies configured through the environment variables for certain hosts, you can specify them in NO_PROXY.
+
+In your ~/.bash_profile:
+
+	export HTTP_PROXY=http://10.10.1.10:3128
+	export HTTPS_PROXY=https://10.10.1.10:1080
+	export NO_PROXY=localhost,example.com
